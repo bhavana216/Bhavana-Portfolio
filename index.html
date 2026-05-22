@@ -1216,6 +1216,302 @@ window.addEventListener('scroll', () => {
     }
   });
 });
+
+/* ═══════════════════════════════════════════
+   ADVANCED CLICK & INTERACTION EFFECTS
+═══════════════════════════════════════════ */
+
+// ── 1. RIPPLE BURST on every click ──
+(function initRipple() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .ripple-host { position:relative; overflow:hidden; }
+    .ripple-wave {
+      position:absolute; border-radius:50%;
+      transform:scale(0); pointer-events:none;
+      animation:rippleAnim .7s cubic-bezier(.25,.46,.45,.94) forwards;
+    }
+    @keyframes rippleAnim {
+      to { transform:scale(4.5); opacity:0; }
+    }
+    /* Particle burst canvas */
+    #particle-canvas {
+      position:fixed; inset:0; pointer-events:none; z-index:8999;
+    }
+    /* Magnetic button tilt */
+    .btn { transition:transform .18s cubic-bezier(.25,.46,.45,.94), box-shadow .18s ease !important; }
+    /* Skill tag pop */
+    .sk { cursor:pointer; transition:transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease, background .2s !important; }
+    .sk:active { transform:scale(.88) !important; }
+    .sk.popped { animation:skPop .4s cubic-bezier(.34,1.56,.64,1) forwards; }
+    @keyframes skPop {
+      0%   { transform:scale(1); }
+      40%  { transform:scale(1.35) rotate(-4deg); }
+      70%  { transform:scale(.92) rotate(2deg); }
+      100% { transform:scale(1) rotate(0); }
+    }
+    /* Card shockwave ring */
+    .card-ring {
+      position:absolute; inset:-2px; border-radius:inherit;
+      border:2px solid var(--lav); opacity:0; pointer-events:none;
+      animation:cardRing .55s ease-out forwards;
+    }
+    @keyframes cardRing {
+      0%   { transform:scale(1); opacity:.7; }
+      100% { transform:scale(1.06); opacity:0; }
+    }
+    /* Glow pulse on nav links */
+    .nav-center a { position:relative; overflow:hidden; }
+    .nav-center a::after {
+      content:''; position:absolute; inset:0; border-radius:20px;
+      background:var(--grad); opacity:0;
+      transition:opacity .25s;
+    }
+    .nav-center a:active::after { opacity:.18; }
+    /* Click flash overlay on hero buttons */
+    .btn::after {
+      content:''; position:absolute; inset:0; border-radius:inherit;
+      background:#fff; opacity:0; pointer-events:none;
+      transition:opacity .15s;
+    }
+    .btn { position:relative; overflow:hidden; }
+    .btn:active::after { opacity:.25; }
+    /* Progress bar glow on hover */
+    .prog-fill { transition:filter .3s ease; }
+    .prog-fill:hover { filter:brightness(1.25) drop-shadow(0 0 6px rgba(139,127,212,.6)); }
+    /* Magnetic pull effect */
+    .magnetic { transition:transform .2s cubic-bezier(.25,.46,.45,.94); }
+    /* Cursor sparkle trail */
+    .sparkle {
+      position:fixed; pointer-events:none; z-index:9998;
+      width:6px; height:6px; border-radius:50%;
+      animation:sparkleFade .6s ease forwards;
+    }
+    @keyframes sparkleFade {
+      0%   { transform:scale(1) translate(0,0); opacity:.9; }
+      100% { transform:scale(0) translate(var(--dx),var(--dy)); opacity:0; }
+    }
+    /* Tilt card highlight */
+    .proj-card, .cert-card, .dv-card, .j-card {
+      transform-style:preserve-3d;
+      will-change:transform;
+    }
+    .tilt-shine {
+      position:absolute; inset:0; border-radius:inherit;
+      background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,.18) 0%, transparent 65%);
+      pointer-events:none; opacity:0; transition:opacity .3s;
+    }
+    .proj-card:hover .tilt-shine,
+    .cert-card:hover .tilt-shine,
+    .dv-card:hover .tilt-shine,
+    .j-card:hover .tilt-shine { opacity:1; }
+    /* Section click flash */
+    .sec-tag { cursor:pointer; }
+    .sec-tag:active { transform:scale(.93); }
+    /* Number counter glow */
+    .stat-n { transition:filter .3s; }
+    .stat:hover .stat-n { filter:drop-shadow(0 0 10px rgba(139,127,212,.7)); }
+    /* Floating emoji on project click */
+    .float-emoji {
+      position:fixed; pointer-events:none; z-index:9997;
+      font-size:1.6rem; animation:floatUp .9s ease forwards;
+    }
+    @keyframes floatUp {
+      0%   { transform:translateY(0) scale(1); opacity:1; }
+      100% { transform:translateY(-90px) scale(1.4); opacity:0; }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+// ── 2. PARTICLE CANVAS ──
+const canvas = document.createElement('canvas');
+canvas.id = 'particle-canvas';
+document.body.appendChild(canvas);
+const ctx2 = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+window.addEventListener('resize', () => { canvas.width=window.innerWidth; canvas.height=window.innerHeight; });
+
+const particles = [];
+function spawnParticles(x, y, color='#8b7fd4', count=14) {
+  for (let i=0; i<count; i++) {
+    const angle = (Math.PI*2/count)*i + Math.random()*.4;
+    const speed = 2.5 + Math.random()*4;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed - 1,
+      r: 3 + Math.random()*4,
+      alpha: 1,
+      color,
+      decay: .025 + Math.random()*.02,
+      gravity: .12
+    });
+  }
+}
+function animParticles() {
+  ctx2.clearRect(0,0,canvas.width,canvas.height);
+  for (let i=particles.length-1; i>=0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += p.gravity;
+    p.vx *= .97; p.alpha -= p.decay;
+    if (p.alpha<=0) { particles.splice(i,1); continue; }
+    ctx2.save();
+    ctx2.globalAlpha = p.alpha;
+    ctx2.beginPath();
+    ctx2.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx2.fillStyle = p.color;
+    ctx2.fill();
+    ctx2.restore();
+  }
+  requestAnimationFrame(animParticles);
+}
+animParticles();
+
+// ── 3. RIPPLE on clickable elements ──
+const rippleTargets = 'a, button, .proj-card, .cert-card, .dv-card, .j-card, .clink, .sk, .btn, .sec-tag, .nav-center a, .nav-resume-btn';
+document.querySelectorAll(rippleTargets).forEach(el => {
+  el.classList.add('ripple-host');
+});
+document.addEventListener('click', e => {
+  const target = e.target.closest(rippleTargets);
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const size = Math.max(rect.width, rect.height) * 2;
+  const wave = document.createElement('span');
+  wave.className = 'ripple-wave';
+  // Pick color based on element type
+  let col = 'rgba(139,127,212,.25)';
+  if (target.classList.contains('btn-rose')) col = 'rgba(232,137,154,.3)';
+  if (target.classList.contains('sk')) col = 'rgba(114,201,168,.3)';
+  wave.style.cssText = `width:${size}px;height:${size}px;left:${x-size/2}px;top:${y-size/2}px;background:${col};`;
+  target.appendChild(wave);
+  wave.addEventListener('animationend', () => wave.remove());
+
+  // Particle burst
+  const colors = ['#8b7fd4','#72c9a8','#e8899a','#f2a97e','#7ec3e8'];
+  spawnParticles(e.clientX, e.clientY, colors[Math.floor(Math.random()*colors.length)], 12);
+});
+
+// ── 4. SKILL TAG POP ──
+document.querySelectorAll('.sk').forEach(sk => {
+  sk.addEventListener('click', function() {
+    this.classList.remove('popped');
+    void this.offsetWidth;
+    this.classList.add('popped');
+    this.addEventListener('animationend', () => this.classList.remove('popped'), {once:true});
+  });
+});
+
+// ── 5. CARD SHOCKWAVE RING on click ──
+document.querySelectorAll('.proj-card, .cert-card, .dv-card, .j-card').forEach(card => {
+  card.addEventListener('click', function() {
+    const ring = document.createElement('div');
+    ring.className = 'card-ring';
+    this.appendChild(ring);
+    ring.addEventListener('animationend', () => ring.remove());
+  });
+});
+
+// ── 6. 3D TILT on cards ──
+document.querySelectorAll('.proj-card, .cert-card, .j-card').forEach(card => {
+  // Add shine layer
+  const shine = document.createElement('div');
+  shine.className = 'tilt-shine';
+  card.appendChild(shine);
+
+  card.addEventListener('mousemove', function(e) {
+    const r = this.getBoundingClientRect();
+    const cx = (e.clientX - r.left) / r.width;
+    const cy = (e.clientY - r.top)  / r.height;
+    const rotX = (cy - .5) * -14;
+    const rotY = (cx - .5) * 14;
+    this.style.transform = `perspective(700px) rotateX(${rotX}deg) rotateY(${rotY}deg) translateY(-6px) scale(1.02)`;
+    shine.style.setProperty('--mx', (cx*100)+'%');
+    shine.style.setProperty('--my', (cy*100)+'%');
+  });
+  card.addEventListener('mouseleave', function() {
+    this.style.transform = '';
+  });
+});
+
+// ── 7. MAGNETIC EFFECT on buttons ──
+document.querySelectorAll('.btn, .nav-resume-btn').forEach(btn => {
+  btn.classList.add('magnetic');
+  btn.addEventListener('mousemove', function(e) {
+    const r = this.getBoundingClientRect();
+    const cx = e.clientX - r.left - r.width/2;
+    const cy = e.clientY - r.top  - r.height/2;
+    this.style.transform = `translate(${cx*.18}px,${cy*.18}px) translateY(-2px)`;
+  });
+  btn.addEventListener('mouseleave', function() {
+    this.style.transform = '';
+  });
+});
+
+// ── 8. FLOATING EMOJI on project card click ──
+document.querySelectorAll('.proj-card').forEach(card => {
+  card.addEventListener('click', function(e) {
+    const emoji = this.querySelector('.proj-emoji');
+    if (!emoji) return;
+    const el = document.createElement('div');
+    el.className = 'float-emoji';
+    el.textContent = emoji.textContent;
+    el.style.left = e.clientX - 12 + 'px';
+    el.style.top  = e.clientY - 12 + 'px';
+    document.body.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  });
+});
+
+// ── 9. CURSOR SPARKLE TRAIL ──
+const sparkColors = ['#8b7fd4','#72c9a8','#e8899a','#f2a97e','#c4bdf0'];
+let lastSparkTime = 0;
+document.addEventListener('mousemove', e => {
+  const now = Date.now();
+  if (now - lastSparkTime < 60) return;
+  lastSparkTime = now;
+  const sp = document.createElement('div');
+  sp.className = 'sparkle';
+  sp.style.left = e.clientX + 'px';
+  sp.style.top  = e.clientY + 'px';
+  sp.style.background = sparkColors[Math.floor(Math.random()*sparkColors.length)];
+  const dx = (Math.random()-0.5)*40 + 'px';
+  const dy = (Math.random()-0.5)*40 + 'px';
+  sp.style.setProperty('--dx', dx);
+  sp.style.setProperty('--dy', dy);
+  document.body.appendChild(sp);
+  sp.addEventListener('animationend', () => sp.remove());
+});
+
+// ── 10. NAV LINK click burst ──
+document.querySelectorAll('.nav-center a').forEach(a => {
+  a.addEventListener('click', function(e) {
+    spawnParticles(e.clientX, e.clientY, '#8b7fd4', 8);
+  });
+});
+
+// ── 11. SECTION TAG click shockwave ──
+document.querySelectorAll('.sec-tag').forEach(tag => {
+  tag.addEventListener('click', function(e) {
+    spawnParticles(e.clientX, e.clientY, '#72c9a8', 16);
+  });
+});
+
+// ── 12. PROGRESS BAR click pulse ──
+document.querySelectorAll('.prog-track').forEach(track => {
+  track.addEventListener('click', function(e) {
+    spawnParticles(e.clientX, e.clientY, '#8b7fd4', 6);
+    const fill = this.querySelector('.prog-fill');
+    if (fill) {
+      fill.style.filter = 'brightness(1.4) drop-shadow(0 0 10px rgba(139,127,212,.8))';
+      setTimeout(() => fill.style.filter='', 600);
+    }
+  });
+});
 </script>
 </body>
 </html>
